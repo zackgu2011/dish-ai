@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="zh-CN">
+<head><meta charset="utf-8"><title>smoke</title></head>
+<body>
+<img id="t" alt="">
+<script src="https://cdn.jsdelivr.net/npm/onnxruntime-web@1.22.0/dist/ort.min.js"></script>
+<script src="dish-recognizer.js"></script>
+<script>
+window.SMOKE = { done: false, log: [] };
+const say = (m) => { window.SMOKE.log.push(String(m)); };
+
+(async () => {
+  try {
+    say('DishRecognizer 存在: ' + (typeof window.DishRecognizer === 'object'));
+    say('菜品库条数: ' + DishRecognizer.dishes().length);
+
+    await DishRecognizer.load((m) => say('load: ' + m));
+    say('isReady: ' + DishRecognizer.isReady());
+    say('类别数: ' + DishRecognizer.classList().length);
+    say('类别: ' + DishRecognizer.classList().join(','));
+
+    const DATE = new URLSearchParams(location.search).get('date') || DishRecognizer.keyOf(new Date());
+    say('测试日期: ' + DATE);
+    const menu = DishRecognizer.dayMenuFor(DATE);
+    say('当餐菜单: ' + (menu ? `wk${menu.wk} 早${menu.breakfast.length}/午${menu.lunch.length}/晚${menu.dinner.length}` : '周末无菜单'));
+
+    // 认一张图（走 http 拿 val 里的图）
+    const img = document.getElementById('t');
+    await new Promise((r) => { img.onload = r; img.onerror = r; img.src = 'data/cls_poc/val/麻婆豆腐/000000.jpg'; });
+    const res = await DishRecognizer.predict(img, { topN: 3 });
+    say('predict 返回 ' + res.length + ' 条');
+    res.forEach((x, i) => say(`  #${i + 1} ${x.name} ${(x.prob * 100).toFixed(1)}% onMenu=${x.onMenu} kcal=${x.kcal} dish=${x.dish ? x.dish.id : 'null'}`));
+
+    // 写购物车
+    if (res[0].dish) {
+      const before = DishRecognizer.dayTotal(DishRecognizer.keyOf(new Date()));
+      DishRecognizer.addToCart(res[0].dish.id, 'lunch', DishRecognizer.keyOf(new Date()));
+      const after = DishRecognizer.dayTotal(DishRecognizer.keyOf(new Date()));
+      const cart = JSON.parse(localStorage.getItem('hdfz:planner:cart:v1') || '{}');
+      const dk = DishRecognizer.keyOf(new Date());
+      say('购物车写入: lunch 条数=' + (cart[dk] && cart[dk].lunch ? cart[dk].lunch.length : 0));
+      say('当日热量 ' + before + ' → ' + after);
+    } else {
+      say('⚠️ res[0].dish 为 null（菜品库可能没入库）');
+    }
+    say('SMOKE_OK');
+  } catch (e) {
+    say('SMOKE_FAIL: ' + e.message);
+  }
+  window.SMOKE.done = true;
+})();
+</script>
+</body>
+</html>

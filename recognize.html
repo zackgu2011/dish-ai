@@ -1,0 +1,1346 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="theme-color" content="#152018">
+<meta name="description" content="对着食堂的菜拍一张，在本机识别是哪道菜，一键加入今日选菜单。图片不上传。">
+<title>拍照识菜 · 恒大减肥集团</title>
+<link rel="icon" href="data:,">
+<style>
+/* 本页专用排版样式：设计 token 全部来自 ../styles.css（在后引入、优先级更高）。
+   下面这组 :root 只作兜底——当以 dish-ai/ 为服务根、styles.css 404 时页面依然成立。 */
+:root {
+  --bg: #f6f8ef;
+  --surface: #ffffff;
+  --surface-muted: #e8efdc;
+  --ink: #152018;
+  --muted: #5b665b;
+  --line: #d6dece;
+  --accent: #2f7d4f;
+  --accent-strong: #1f5f3d;
+  --accent-soft: #dceee3;
+  --energy: #f0a735;
+  --energy-soft: #fff1cc;
+  --track: #db6a41;
+  --shadow: 0 24px 70px rgba(34, 72, 47, 0.16);
+  --radius: 1rem;
+  --radius-lg: 1.4rem;
+  --radius-xl: 2rem;
+}
+
+/* 本页有 display:flex/grid 的类（如 .rz-statusline），会盖过 UA 对 [hidden] 的 display:none，
+   这里统一拉回，保证 JS 里所有 .hidden = true 都真实生效 */
+[hidden] {
+  display: none !important;
+}
+
+body {
+  background: var(--bg);
+  color: var(--ink);
+  font-family: Geist, "SF Pro Display", "PingFang SC", "Microsoft YaHei", ui-sans-serif, system-ui, sans-serif;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.rz-page {
+  margin: 0 auto;
+  max-width: 42rem;
+  padding: 1rem 1rem 3.4rem;
+}
+
+/* ---------- 顶栏 ---------- */
+.rz-header {
+  align-items: center;
+  display: flex;
+  gap: 0.8rem;
+  justify-content: space-between;
+  margin: 0.2rem 0 0.9rem;
+}
+
+.rz-brand {
+  align-items: center;
+  display: flex;
+  gap: 0.7rem;
+  min-width: 0;
+}
+
+.rz-brandtext strong {
+  display: block;
+  font-size: 1.02rem;
+  line-height: 1.25;
+}
+
+.rz-pagetitle {
+  font-size: 1.02rem;
+  line-height: 1.25;
+  margin: 0;
+}
+
+.rz-statusline {
+  align-items: center;
+  color: var(--muted);
+  display: inline-flex;
+  font-size: 0.8rem;
+  gap: 0.4rem;
+  min-height: 1.1rem;
+}
+
+#rzStatus.rz-ok {
+  color: var(--accent-strong);
+  font-weight: 700;
+}
+
+#rzStatus.rz-err {
+  color: var(--track);
+  font-weight: 700;
+}
+
+.rz-dot {
+  background: var(--muted);
+  border-radius: 999px;
+  flex: none;
+  height: 0.58rem;
+  width: 0.58rem;
+}
+
+.rz-dot.rz-dot-busy {
+  animation: rz-pulse 1.1s ease-in-out infinite;
+  background: var(--energy);
+}
+
+.rz-dot.rz-dot-ok {
+  background: var(--accent);
+}
+
+.rz-dot.rz-dot-err {
+  background: var(--track);
+}
+
+@keyframes rz-pulse {
+  50% { opacity: 0.3; }
+}
+
+/* ---------- 卡片通用 ---------- */
+.rz-cards {
+  display: grid;
+  gap: 0.9rem;
+}
+
+.rz-card h2 {
+  font-size: 1.02rem;
+  margin: 0;
+}
+
+.rz-cardhead {
+  align-items: baseline;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+  margin-bottom: 0.6rem;
+}
+
+.rz-banner {
+  background: color-mix(in srgb, var(--energy) 16%, var(--surface));
+  border: 1px solid color-mix(in srgb, var(--energy) 40%, var(--line));
+  border-radius: var(--radius-lg);
+  margin-bottom: 0.9rem;
+  padding: 0.85rem 1rem;
+}
+
+.rz-banner p {
+  margin: 0 0 0.4rem;
+}
+
+.rz-banner p:last-child {
+  margin-bottom: 0;
+}
+
+.rz-banner a {
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+
+/* ---------- 取景器主卡（深色，呼应 brand-mark） ---------- */
+.rz-hero {
+  background: var(--ink);
+  border-radius: var(--radius-xl);
+  color: var(--bg);
+  padding: 1rem;
+  box-shadow: var(--shadow);
+}
+
+.rz-vf-idle {
+  align-items: center;
+  border: 1.5px dashed color-mix(in srgb, var(--bg) 34%, transparent);
+  border-radius: var(--radius-lg);
+  display: grid;
+  justify-items: center;
+  padding: 2.1rem 1rem 1.7rem;
+  text-align: center;
+}
+
+.rz-vf-icon {
+  align-items: center;
+  background: color-mix(in srgb, var(--bg) 12%, transparent);
+  border-radius: 999px;
+  display: inline-flex;
+  font-size: 1.75rem;
+  height: 4.2rem;
+  justify-content: center;
+  width: 4.2rem;
+}
+
+.rz-vf-title {
+  font-size: 1.1rem;
+  font-weight: 800;
+  margin: 0.85rem 0 0;
+}
+
+.rz-vf-sub {
+  color: color-mix(in srgb, var(--bg) 72%, transparent);
+  font-size: 0.88rem;
+  margin: 0.2rem 0 0;
+}
+
+.rz-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+  justify-content: center;
+  margin-top: 1.1rem;
+  width: 100%;
+}
+
+.rz-actions button {
+  flex: 1 1 9rem;
+  max-width: 15rem;
+}
+
+.rz-btn-primary,
+.rz-btn-ghost {
+  align-items: center;
+  border-radius: 999px;
+  cursor: pointer;
+  display: inline-flex;
+  font: inherit;
+  font-weight: 800;
+  justify-content: center;
+  min-height: 3rem;
+  padding: 0 1.3rem;
+  transition: transform 180ms ease, opacity 180ms ease;
+}
+
+.rz-btn-primary {
+  background: var(--bg);
+  border: 0;
+  color: var(--ink);
+}
+
+.rz-btn-ghost {
+  background: transparent;
+  border: 1px solid color-mix(in srgb, var(--bg) 40%, transparent);
+  color: var(--bg);
+}
+
+.rz-btn-primary:active,
+.rz-btn-ghost:active {
+  transform: translateY(1px);
+}
+
+.rz-btn-primary:disabled,
+.rz-btn-ghost:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.rz-caps {
+  color: color-mix(in srgb, var(--bg) 66%, transparent);
+  font-size: 0.82rem;
+  margin: 1rem 0 0;
+}
+
+#rzCaps.rz-caps-err {
+  color: color-mix(in srgb, var(--track) 80%, var(--bg));
+  font-weight: 700;
+}
+
+.rz-vf-photo {
+  display: grid;
+  gap: 0.75rem;
+}
+
+.rz-preview {
+  border-radius: var(--radius-lg);
+  display: block;
+  margin: 0 auto;
+  max-height: 46vh;
+  max-width: 100%;
+  object-fit: contain;
+}
+
+.rz-vf-photoactions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: center;
+}
+
+.rz-chipbtn {
+  background: color-mix(in srgb, var(--bg) 13%, transparent);
+  border: 1px solid color-mix(in srgb, var(--bg) 26%, transparent);
+  border-radius: 999px;
+  color: var(--bg);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.88rem;
+  font-weight: 700;
+  min-height: 2.4rem;
+  padding: 0 0.95rem;
+}
+
+.rz-chipbtn:active {
+  transform: translateY(1px);
+}
+
+.rz-infer {
+  align-items: center;
+  color: var(--bg);
+  display: flex;
+  font-weight: 700;
+  gap: 0.55rem;
+  justify-content: center;
+  margin: 0;
+  min-height: 2.2rem;
+}
+
+.rz-spin {
+  animation: rz-rotate 1s linear infinite;
+  border: 2px solid color-mix(in srgb, var(--bg) 30%, transparent);
+  border-radius: 999px;
+  border-top-color: var(--bg);
+  flex: none;
+  height: 1rem;
+  width: 1rem;
+}
+
+.rz-hero .rz-statusline {
+  color: inherit;
+}
+
+@keyframes rz-rotate {
+  to { transform: rotate(1turn); }
+}
+
+/* ---------- 日期 / 餐次工具条 ---------- */
+.rz-toolbar {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.rz-date {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.8rem;
+  color: var(--ink);
+  font: inherit;
+  padding: 0.42rem 0.7rem;
+}
+
+.rz-mealtabs {
+  flex: 1 1 13rem;
+}
+
+.rz-menuline {
+  margin: 0.7rem 0 0;
+}
+
+/* ---------- 识别结果 ---------- */
+.rz-row {
+  border-top: 1px solid var(--line);
+  padding: 0.75rem 0;
+}
+
+.rz-row:first-child {
+  border-top: 0;
+  padding-top: 0.15rem;
+}
+
+.rz-row.rz-off .rz-rowhead,
+.rz-row.rz-off .rz-rowmeta {
+  opacity: 0.78;
+}
+
+.rz-rowhead {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+  justify-content: space-between;
+}
+
+.rz-name {
+  font-size: 1.06rem;
+  font-weight: 700;
+}
+
+.rz-rank {
+  color: var(--accent-strong);
+  font-style: normal;
+  font-weight: 900;
+  margin-right: 0.25rem;
+}
+
+.rz-off .rz-rank {
+  color: var(--track);
+}
+
+.rz-tag {
+  border-radius: 999px;
+  font-size: 0.75rem;
+  padding: 0.12rem 0.55rem;
+  white-space: nowrap;
+}
+
+.rz-tag-ok {
+  background: var(--accent-soft);
+  color: var(--accent-strong);
+}
+
+.rz-tag-off {
+  background: color-mix(in srgb, var(--track) 14%, var(--surface));
+  color: var(--track);
+}
+
+.rz-bar {
+  background: var(--surface-muted);
+  border-radius: 999px;
+  height: 0.55rem;
+  margin: 0.5rem 0;
+  overflow: hidden;
+}
+
+.rz-bar i {
+  background: var(--accent);
+  border-radius: 999px;
+  display: block;
+  height: 100%;
+  transition: width 0.45s ease;
+}
+
+.rz-off .rz-bar i {
+  background: var(--track);
+}
+
+.rz-rowmeta {
+  align-items: center;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.55rem;
+  justify-content: space-between;
+}
+
+.rz-pct {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 3.6rem;
+}
+
+.rz-nut {
+  color: var(--muted);
+  flex: 1;
+  min-width: 8rem;
+}
+
+.rz-add {
+  min-width: 6.6rem;
+}
+
+.rz-offnote {
+  margin: 0.6rem 0 0;
+}
+
+.rz-correctrow {
+  margin-top: 0.65rem;
+}
+
+#rzFbPick {
+  margin-top: 0.6rem;
+}
+
+#rzFbPick p {
+  margin: 0 0 0.5rem;
+}
+
+.rz-pickchip {
+  border: 0;
+  cursor: pointer;
+  font: inherit;
+}
+
+/* ---------- 本次已加托盘 ---------- */
+.rz-traylist {
+  display: grid;
+  gap: 0.45rem;
+}
+
+.rz-trayitem {
+  align-items: center;
+  background: var(--accent-soft);
+  border-radius: 0.85rem;
+  display: flex;
+  gap: 0.6rem;
+  padding: 0.55rem 0.8rem;
+}
+
+.rz-trayitem b {
+  flex: 1;
+  min-width: 0;
+}
+
+.rz-trayops {
+  align-items: center;
+  display: inline-flex;
+  gap: 0.3rem;
+}
+
+.rz-tbtn {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-size: 0.85rem;
+  font-weight: 800;
+  min-height: 2rem;
+  padding: 0 0.65rem;
+}
+
+.rz-tbtn:active {
+  transform: translateY(1px);
+}
+
+.rz-tbtn.rz-tdel {
+  color: var(--track);
+}
+
+.rz-trayqty {
+  font-variant-numeric: tabular-nums;
+  font-weight: 800;
+  min-width: 1.7rem;
+  text-align: center;
+}
+
+.rz-traykcal {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+  min-width: 5.2rem;
+  text-align: right;
+}
+
+.rz-trayfoot {
+  margin: 0.7rem 0 0;
+  text-align: right;
+}
+
+.rz-trayfoot a {
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+
+#rzDayTotal {
+  color: var(--accent-strong);
+  font-weight: 800;
+}
+
+/* ---------- 能认出的菜（折叠） ---------- */
+.rz-capsdetails {
+  padding: 0;
+}
+
+.rz-capsdetails summary {
+  align-items: baseline;
+  cursor: pointer;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  justify-content: space-between;
+  list-style: none;
+  padding: 1.05rem 1.15rem;
+}
+
+.rz-capsdetails summary::-webkit-details-marker {
+  display: none;
+}
+
+.rz-capsdetails summary::after {
+  color: var(--muted);
+  content: "▾";
+}
+
+.rz-capsdetails[open] summary::after {
+  content: "▴";
+}
+
+.rz-capsbody {
+  border-top: 1px solid var(--line);
+  padding: 0.9rem 1.15rem 1.1rem;
+}
+
+.rz-capsbody p {
+  margin: 0 0 0.6rem;
+}
+
+.rz-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+}
+
+.rz-chip {
+  background: var(--accent-soft);
+  border-radius: 999px;
+  color: var(--accent-strong);
+  font-size: 0.85rem;
+  padding: 0.22rem 0.7rem;
+}
+
+/* ---------- 其它 ---------- */
+.rz-foot {
+  margin-top: 1.3rem;
+  text-align: center;
+}
+
+.rz-toast {
+  background: var(--ink);
+  border-radius: 999px;
+  bottom: 1.2rem;
+  box-shadow: var(--shadow);
+  color: var(--bg);
+  left: 50%;
+  max-width: 92vw;
+  padding: 0.65rem 1.2rem;
+  position: fixed;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  z-index: 20;
+}
+
+@media (max-width: 480px) {
+  .rz-page { padding: 0.8rem 0.8rem 3.4rem; }
+  .rz-hero { padding: 0.8rem; }
+  .rz-pct { min-width: 3.2rem; }
+  .rz-traykcal { min-width: 4.4rem; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .rz-spin, .rz-dot.rz-dot-busy { animation: none; }
+  .rz-bar i { transition: none; }
+  .rz-btn-primary, .rz-btn-ghost, .rz-chipbtn, .rz-tbtn { transition: none; }
+}
+</style>
+  <link rel="stylesheet" href="../styles.css?v=20260924-beian1">
+</head>
+<body>
+<div class="rz-page">
+  <header class="rz-header">
+    <div class="rz-brand">
+      <span class="brand-mark" aria-hidden="true">恒</span>
+      <div class="rz-brandtext">
+        <h1 class="rz-pagetitle">拍照识菜</h1>
+        <span class="rz-statusline"><i class="rz-dot" id="rzDot" aria-hidden="true"></i><span id="rzStatus" aria-live="polite">正在准备…</span></span>
+      </div>
+    </div>
+    <a class="button button-secondary" href="../app.html">去选菜台</a>
+  </header>
+
+  <div class="rz-banner" id="rzDbBanner" hidden>
+    <p><strong>还没有菜品数据。</strong>识别可以跑，但菜名对不上菜品库、也没法加入选菜单。</p>
+    <p>请先打开一次 <a href="../app.html">今日选菜台</a>（菜品库会自动建立），再回到本页。</p>
+  </div>
+
+  <div class="rz-cards">
+    <section class="rz-hero" aria-label="拍照识别">
+      <div class="rz-vf-idle" id="rzVfIdle">
+        <span class="rz-vf-icon" aria-hidden="true">📷</span>
+        <p class="rz-vf-title">对准食堂的菜，拍一张</p>
+        <p class="rz-vf-sub">认出是今天这餐的哪道菜，确认后加入选菜单</p>
+        <div class="rz-actions">
+          <button type="button" class="rz-btn-primary" id="rzBtnCam" disabled>📷 拍照识别</button>
+          <button type="button" class="rz-btn-ghost" id="rzBtnAlbum" disabled>从相册选择</button>
+        </div>
+        <p class="rz-caps" id="rzCaps">首次需下载推理引擎和模型（约 17MB，本站直发）…</p>
+      </div>
+      <div class="rz-vf-photo" id="rzPreviewWrap" hidden>
+        <img class="rz-preview" id="rzPreview" alt="待识别的菜品照片">
+        <div class="rz-vf-photoactions">
+          <button type="button" class="rz-chipbtn" id="rzRetakeCam">📷 再拍一张</button>
+          <button type="button" class="rz-chipbtn" id="rzRetake">🖼 从相册换</button>
+        </div>
+      </div>
+      <p class="rz-infer" id="rzInfer" hidden aria-live="polite"><span class="rz-spin" aria-hidden="true"></span>识别中…</p>
+      <input type="file" id="rzFileCam" accept="image/*" capture="environment" hidden>
+      <input type="file" id="rzFileAlbum" accept="image/*" hidden>
+    </section>
+
+    <section class="pricing-panel rz-card" aria-label="日期与餐次">
+      <div class="rz-toolbar">
+        <input class="rz-date" type="date" id="rzDate" aria-label="日期">
+        <div class="plan-tabs rz-mealtabs" role="group" aria-label="选择餐次" id="rzMealTabs">
+          <button type="button" class="plan-tab" data-meal="breakfast">早餐</button>
+          <button type="button" class="plan-tab" data-meal="lunch">午餐</button>
+          <button type="button" class="plan-tab" data-meal="dinner">晚餐</button>
+        </div>
+      </div>
+      <p class="plan-copy rz-menuline" id="rzMenuLine"></p>
+    </section>
+
+    <section class="pricing-panel rz-card" id="rzResultsCard" hidden aria-label="识别结果">
+      <div class="rz-cardhead">
+        <h2>识别结果</h2>
+        <span class="plan-copy">拍糊了就「换一张」重拍</span>
+      </div>
+      <div id="rzResults"></div>
+      <p class="plan-copy rz-offnote">标「今天没供应」的菜：如果食堂临时加了菜，确认无误后仍然可以加入。</p>
+      <div class="rz-correctrow">
+        <button type="button" class="plan-tab" id="rzFbOpen" hidden>认错了？选对的菜</button>
+        <div id="rzFbPick" hidden>
+          <p class="plan-copy">这张照片实际是哪道菜？选一下——照片和答案只存在本机，攒起来给模型补课。</p>
+          <div class="rz-chips" id="rzFbChips"></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="pricing-panel rz-card" id="rzTrayCard" hidden aria-label="本次已加">
+      <div class="rz-cardhead">
+        <h2 id="rzTrayTitle">本次已加</h2>
+        <span id="rzDayTotal"></span>
+      </div>
+      <div class="rz-traylist" id="rzTrayList"></div>
+      <p class="rz-trayfoot"><a href="../app.html">去选菜台看整单 →</a></p>
+    </section>
+
+    <section class="pricing-panel rz-card" id="rzFbCard" hidden aria-label="实拍纠错记录">
+      <div class="rz-cardhead">
+        <h2>实拍纠错记录 · <span id="rzFbCount">0</span> 条</h2>
+        <span class="rz-trayops">
+          <button type="button" class="plan-tab" id="rzFbExport">导出实拍包</button>
+          <button type="button" class="plan-tab" id="rzFbClear">清空记录</button>
+        </span>
+      </div>
+      <p class="plan-copy">照片缩略图和纠正答案只存在这台设备。「导出实拍包」生成一个 json 文件，发给训练同学就能直接用来微调下一个模型（实拍图正是现在最缺的训练数据）。</p>
+    </section>
+
+    <details class="pricing-panel rz-card rz-capsdetails">
+      <summary>
+        <h2 id="rzCapsTitle">目前能认出的菜</h2>
+        <span class="plan-copy">点开看支持哪些菜</span>
+      </summary>
+      <div class="rz-capsbody">
+        <p class="plan-copy">食堂有 300+ 道菜，模型目前只认识下面这些。拍别的菜时会给出「最像的一道」，但可能不对——认不出是正常的，不是功能坏了，请去选菜台手动选。</p>
+        <div class="rz-chips" id="rzChips"><span class="plan-copy">引擎加载后显示…</span></div>
+      </div>
+    </details>
+  </div>
+
+  <p class="plan-copy rz-foot">识别结果仅供参考，以人工确认为准；热量为食堂标准份估算值。图片全程在本机处理，不上传。</p>
+</div>
+
+<div class="rz-toast" id="rzToast" role="status" aria-live="polite" hidden></div>
+
+<script src="ort/ort.wasm.min.js?v=20260912b"></script>
+<script src="dish-recognizer.js?v=20260912b"></script>
+<script>
+(function () {
+  'use strict';
+
+  const DR = window.DishRecognizer;
+  const $ = (s) => document.querySelector(s);
+
+  const els = {
+    dot: $('#rzDot'),
+    status: $('#rzStatus'),
+    dbBanner: $('#rzDbBanner'),
+    vfIdle: $('#rzVfIdle'),
+    date: $('#rzDate'),
+    mealTabs: $('#rzMealTabs'),
+    menuLine: $('#rzMenuLine'),
+    btnCam: $('#rzBtnCam'),
+    btnAlbum: $('#rzBtnAlbum'),
+    fileCam: $('#rzFileCam'),
+    fileAlbum: $('#rzFileAlbum'),
+    caps: $('#rzCaps'),
+    capsTitle: $('#rzCapsTitle'),
+    previewWrap: $('#rzPreviewWrap'),
+    preview: $('#rzPreview'),
+    retake: $('#rzRetake'),
+    retakeCam: $('#rzRetakeCam'),
+    infer: $('#rzInfer'),
+    resultsCard: $('#rzResultsCard'),
+    results: $('#rzResults'),
+    trayCard: $('#rzTrayCard'),
+    trayTitle: $('#rzTrayTitle'),
+    trayList: $('#rzTrayList'),
+    dayTotal: $('#rzDayTotal'),
+    fbOpen: $('#rzFbOpen'),
+    fbPick: $('#rzFbPick'),
+    fbChips: $('#rzFbChips'),
+    fbCard: $('#rzFbCard'),
+    fbCount: $('#rzFbCount'),
+    fbExport: $('#rzFbExport'),
+    fbClear: $('#rzFbClear'),
+    chips: $('#rzChips'),
+    toast: $('#rzToast'),
+  };
+
+  /* ?date=YYYY-MM-DD & ?meal=breakfast|lunch|dinner 便于测试和深链 */
+  const params = new URLSearchParams(location.search);
+  let dateKey = params.get('date') || DR.keyOf(new Date());
+  let meal = params.get('meal') || DR.currentMeal();
+  let modelReady = false;
+  let lastImage = null;
+  let lastUrl = null;
+  let toastTimer = null;
+  /* 纠错反馈用：当前照片的 top-3 与序号（implicit 去重） */
+  let lastTop3 = [];
+  let lastTopName = null;
+  let photoSeq = 0;
+  const implicitDone = new Set();
+
+  const WD = '日一二三四五六';
+  const dateLabel = (key) => {
+    const d = new Date(Number(key.slice(0, 4)), Number(key.slice(5, 7)) - 1, Number(key.slice(8, 10)));
+    return `${d.getMonth() + 1}月${d.getDate()}日 周${WD[d.getDay()]}`;
+  };
+
+  function setStatus(msg, kind) {
+    els.status.textContent = msg;
+    els.status.className = kind === 'ok' ? 'rz-ok' : kind === 'err' ? 'rz-err' : '';
+    els.dot.className = 'rz-dot' + (kind === 'ok' ? ' rz-dot-ok' : kind === 'err' ? ' rz-dot-err' : ' rz-dot-busy');
+  }
+
+  function toast(msg) {
+    els.toast.textContent = msg;
+    els.toast.hidden = false;
+    if (toastTimer) clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => { els.toast.hidden = true; }, 2600);
+  }
+
+  /* ---------- 购物车直读直写（结构与 planner.js / dish-recognizer.js 完全一致） ---------- */
+  const readCart = () => {
+    try {
+      const raw = localStorage.getItem('hdfz:planner:cart:v1');
+      const cart = raw ? JSON.parse(raw) : {};
+      return cart && typeof cart === 'object' ? cart : {};
+    } catch (err) {
+      return {};
+    }
+  };
+  const writeCart = (cart) => {
+    try { localStorage.setItem('hdfz:planner:cart:v1', JSON.stringify(cart)); } catch (err) { /* 隐私模式降级 */ }
+  };
+  const ensureDay = (cart, key) => {
+    const day = cart[key] && typeof cart[key] === 'object' ? cart[key] : { breakfast: [], lunch: [], dinner: [] };
+    if (!Array.isArray(day.breakfast)) day.breakfast = [];
+    if (!Array.isArray(day.lunch)) day.lunch = [];
+    if (!Array.isArray(day.dinner)) day.dinner = [];
+    return day;
+  };
+  const cartQty = (dishId) => {
+    const day = readCart()[dateKey];
+    const hit = day && Array.isArray(day[meal]) ? day[meal].find((i) => i.id === dishId) : null;
+    return hit ? hit.qty : 0;
+  };
+
+  /* ---------- 实拍纠错反馈（给训练侧 P4 微调当原料；只存本机，手动导出） ---------- */
+  const FB_KEY = 'hdfz:recognize:feedback:v1';
+  const FB_MAX = 100;
+
+  const readFb = () => {
+    try {
+      const raw = localStorage.getItem(FB_KEY);
+      const fb = raw ? JSON.parse(raw) : { version: 1, records: [] };
+      return fb && Array.isArray(fb.records) ? fb : { version: 1, records: [] };
+    } catch (err) {
+      return { version: 1, records: [] };
+    }
+  };
+
+  function thumbDataUrl(srcImg) {
+    try {
+      const scale = Math.min(1, 320 / Math.max(srcImg.naturalWidth, srcImg.naturalHeight));
+      const cv = document.createElement('canvas');
+      cv.width = Math.max(1, Math.round(srcImg.naturalWidth * scale));
+      cv.height = Math.max(1, Math.round(srcImg.naturalHeight * scale));
+      cv.getContext('2d').drawImage(srcImg, 0, 0, cv.width, cv.height);
+      return cv.toDataURL('image/jpeg', 0.72);
+    } catch (err) {
+      return null; /* 画布异常时记录里没有图，但答案仍在 */
+    }
+  }
+
+  function addFeedback(rec) {
+    const fb = readFb();
+    rec.t = Date.now();
+    rec.date = dateKey;
+    rec.meal = meal;
+    rec.classes = DR.classList();
+    rec.top3 = lastTop3;
+    rec.img = lastImage ? thumbDataUrl(lastImage) : null;
+    fb.records.push(rec);
+    if (fb.records.length > FB_MAX) fb.records = fb.records.slice(-FB_MAX);
+    try {
+      localStorage.setItem(FB_KEY, JSON.stringify(fb));
+    } catch (err) {
+      /* 配额不够就丢老的再试一次，再不行就放弃——绝不能影响选菜主流程 */
+      fb.records = fb.records.slice(-30);
+      try { localStorage.setItem(FB_KEY, JSON.stringify(fb)); } catch (err2) { /* 放弃 */ }
+    }
+    renderFb();
+  }
+
+  function renderFb() {
+    const n = readFb().records.length;
+    els.fbCount.textContent = String(n);
+    els.fbCard.hidden = n === 0;
+  }
+
+  /* 用户把非 top-1 的菜加入购物车 = 一条弱纠错信号（第一次加才算，重复点 +1 不记） */
+  function recordImplicit(dishName) {
+    if (!lastTopName || dishName === lastTopName) return;
+    const key = photoSeq + ':' + dishName;
+    if (implicitDone.has(key)) return;
+    implicitDone.add(key);
+    addFeedback({ type: 'implicit', correct: dishName });
+  }
+
+  /* ---------- 菜单信息 / 当日合计 ---------- */
+  function updateMenuLine() {
+    const menu = DR.dayMenuFor(dateKey);
+    if (!menu) {
+      els.menuLine.textContent = `${dateLabel(dateKey)}是周末，食堂不供餐——识别仍可用，结果都会标「今天没供应」，确认无误可照常加入。`;
+      return;
+    }
+    els.menuLine.textContent = `${dateLabel(dateKey)} · 第${menu.wk}周菜单：早餐 ${menu.breakfast.length} 道 / 午餐 ${menu.lunch.length} 道 / 晚餐 ${menu.dinner.length} 道`;
+  }
+
+  function updateDayTotal() {
+    els.dayTotal.textContent = `${dateLabel(dateKey)}已选合计：${DR.dayTotal(dateKey)} kcal`;
+  }
+
+  /* ---------- 本次已加托盘 ---------- */
+  const dishById = () => new Map(DR.dishes().map((d) => [d.id, d]));
+
+  function renderTray() {
+    const day = readCart()[dateKey];
+    const list = (day && Array.isArray(day[meal]) ? day[meal] : []);
+    const map = dishById();
+    els.trayTitle.textContent = `本次已加 · ${DR.MEAL_LABEL[meal]}`;
+    els.trayList.innerHTML = '';
+    for (const item of list) {
+      const d = map.get(item.id);
+      if (!d) continue;
+      const row = document.createElement('div');
+      row.className = 'rz-trayitem';
+      const name = document.createElement('b');
+      name.textContent = d.name;
+      const ops = document.createElement('span');
+      ops.className = 'rz-trayops';
+      const minus = document.createElement('button');
+      minus.type = 'button';
+      minus.className = 'rz-tbtn';
+      minus.dataset.op = 'minus';
+      minus.dataset.id = item.id;
+      minus.setAttribute('aria-label', `减少一份${d.name}`);
+      minus.textContent = '−';
+      const qty = document.createElement('span');
+      qty.className = 'rz-trayqty';
+      qty.textContent = `×${item.qty}`;
+      const plus = document.createElement('button');
+      plus.type = 'button';
+      plus.className = 'rz-tbtn';
+      plus.dataset.op = 'plus';
+      plus.dataset.id = item.id;
+      plus.setAttribute('aria-label', `再加一份${d.name}`);
+      plus.textContent = '+';
+      ops.appendChild(minus);
+      ops.appendChild(qty);
+      ops.appendChild(plus);
+      const del = document.createElement('button');
+      del.type = 'button';
+      del.className = 'rz-tbtn rz-tdel';
+      del.dataset.op = 'del';
+      del.dataset.id = item.id;
+      del.setAttribute('aria-label', `移除${d.name}`);
+      del.textContent = '✕';
+      ops.appendChild(del);
+      const kcal = document.createElement('span');
+      kcal.className = 'rz-traykcal';
+      kcal.textContent = `${(d.kcalS || 0) * item.qty} kcal`;
+      row.appendChild(name);
+      row.appendChild(ops);
+      row.appendChild(kcal);
+      els.trayList.appendChild(row);
+    }
+    els.trayCard.hidden = list.length === 0;
+  }
+
+  function syncAddButtons() {
+    for (const btn of els.results.querySelectorAll('.rz-add[data-dish-id]')) {
+      const qty = cartQty(btn.dataset.dishId);
+      btn.textContent = qty > 0 ? `已加 ×${qty} · 再点 +1` : `＋ 加入${DR.MEAL_LABEL[meal]}`;
+    }
+  }
+
+  els.trayList.addEventListener('click', (e) => {
+    const btn = e.target.closest('button[data-op]');
+    if (!btn) return;
+    const cart = readCart();
+    const day = ensureDay(cart, dateKey);
+    const list = day[meal];
+    const hit = list.find((i) => i.id === btn.dataset.id);
+    if (!hit) return;
+    if (btn.dataset.op === 'plus') hit.qty += 1;
+    if (btn.dataset.op === 'minus') hit.qty -= 1;
+    if (btn.dataset.op === 'del' || hit.qty <= 0) {
+      day[meal] = list.filter((i) => i !== hit);
+    }
+    writeCart(cart);
+    renderTray();
+    updateDayTotal();
+    syncAddButtons();
+  });
+
+  /* ---------- 纠错：选对的菜 / 导出实拍包 / 清空 ---------- */
+  els.fbOpen.addEventListener('click', () => {
+    els.fbPick.hidden = false;
+    els.fbOpen.hidden = true;
+    if (!els.fbChips.dataset.filled) {
+      els.fbChips.innerHTML = '';
+      for (const name of DR.classList()) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'rz-chip rz-pickchip';
+        chip.textContent = name;
+        chip.addEventListener('click', () => {
+          addFeedback({ type: 'explicit', correct: name });
+          els.fbPick.hidden = true;
+          els.fbOpen.hidden = false;
+          toast(`已记录纠正：这张实际是「${name}」`);
+        });
+        els.fbChips.appendChild(chip);
+      }
+      els.fbChips.dataset.filled = '1';
+    }
+  });
+
+  els.fbExport.addEventListener('click', () => {
+    const fb = readFb();
+    if (!fb.records.length) {
+      toast('还没有纠错记录');
+      return;
+    }
+    const payload = {
+      app: 'hdfz-recognize-feedback',
+      version: 1,
+      exportedAt: new Date().toISOString(),
+      note: 'records[].img 为 320px JPEG 缩略图 dataURL；type=explicit 是人工纠正，implicit 是「加入了非 top-1」的弱信号',
+      records: fb.records,
+    };
+    const blob = new Blob([JSON.stringify(payload)], { type: 'application/json' });
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(blob);
+    a.download = `恒大识菜实拍包-${DR.keyOf(new Date()).replace(/-/g, '')}.json`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 4000);
+    toast(`已导出 ${fb.records.length} 条记录`);
+  });
+
+  els.fbClear.addEventListener('click', () => {
+    const n = readFb().records.length;
+    if (!n) return;
+    if (!window.confirm(`清空这 ${n} 条纠错记录？导出过实拍包再清才不浪费。`)) return;
+    localStorage.removeItem(FB_KEY);
+    renderFb();
+    toast('已清空纠错记录');
+  });
+
+  /* ---------- 识别结果 ---------- */
+  function makeRow(r, idx) {
+    /* matchDish 命中当餐菜单时返回的是 {id,cat,name} 存根（没有营养字段），
+       这里按 id 回菜品库取完整条目，避免显示 undefined */
+    const full = r.dish ? (DR.dishes().find((d) => d.id === r.dish.id) || r.dish) : null;
+    const kcalText = full && full.kcalS != null ? `${full.kcalS} kcal` : '—';
+    const proteinText = full && full.pS != null ? `${full.pS}g` : '—';
+    const RANKS = ['①', '②', '③', '④', '⑤'];
+
+    const row = document.createElement('div');
+    row.className = 'rz-row' + (r.onMenu ? '' : ' rz-off');
+
+    const head = document.createElement('div');
+    head.className = 'rz-rowhead';
+    const name = document.createElement('span');
+    name.className = 'rz-name';
+    const rank = document.createElement('i');
+    rank.className = 'rz-rank';
+    rank.textContent = RANKS[idx] || `${idx + 1}.`;
+    name.appendChild(rank);
+    name.appendChild(document.createTextNode(r.name));
+    const tag = document.createElement('span');
+    tag.className = 'rz-tag ' + (r.onMenu ? 'rz-tag-ok' : 'rz-tag-off');
+    tag.textContent = r.onMenu ? '✅ 今天这餐有' : '⚠️ 今天没供应';
+    head.appendChild(name);
+    head.appendChild(tag);
+    row.appendChild(head);
+
+    const bar = document.createElement('div');
+    bar.className = 'rz-bar';
+    const fill = document.createElement('i');
+    fill.style.width = (r.prob * 100).toFixed(1) + '%';
+    bar.appendChild(fill);
+    row.appendChild(bar);
+
+    const meta = document.createElement('div');
+    meta.className = 'rz-rowmeta';
+    const pct = document.createElement('span');
+    pct.className = 'rz-pct';
+    pct.textContent = (r.prob * 100).toFixed(1) + '%';
+    const nut = document.createElement('span');
+    nut.className = 'rz-nut';
+    nut.textContent = r.dish ? `${kcalText} · 蛋白 ${proteinText}` : '菜品库里没匹配到这道菜';
+    meta.appendChild(pct);
+    meta.appendChild(nut);
+    if (r.dish) {
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'plan-tab rz-add';
+      btn.dataset.dishId = r.dish.id;
+      const qty = cartQty(r.dish.id);
+      btn.textContent = qty > 0 ? `已加 ×${qty} · 再点 +1` : `＋ 加入${DR.MEAL_LABEL[meal]}`;
+      btn.addEventListener('click', () => {
+        const firstAdd = cartQty(r.dish.id) === 0;
+        const item = DR.addToCart(r.dish.id, meal, dateKey);
+        btn.textContent = `已加 ×${item.qty} · 再点 +1`;
+        updateDayTotal();
+        renderTray();
+        if (firstAdd) recordImplicit(r.name);
+        toast(`已加入${DR.MEAL_LABEL[meal]}：${r.dish.name}（${kcalText}）`);
+      });
+      meta.appendChild(btn);
+    }
+    row.appendChild(meta);
+    return row;
+  }
+
+  function renderResults(res) {
+    lastTop3 = res.map((r) => ({ name: r.name, prob: Math.round(r.prob * 1000) / 1000 }));
+    lastTopName = res.length ? res[0].name : null;
+    els.results.innerHTML = '';
+    for (let i = 0; i < res.length; i += 1) els.results.appendChild(makeRow(res[i], i));
+    els.resultsCard.hidden = false;
+    els.fbOpen.hidden = false;
+    els.fbPick.hidden = true;
+    updateDayTotal();
+    renderTray();
+    const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const rect = els.resultsCard.getBoundingClientRect();
+    if (rect.top < 0 || rect.top > window.innerHeight * 0.55) {
+      els.resultsCard.scrollIntoView({ behavior: reduce ? 'auto' : 'smooth', block: 'start' });
+    }
+  }
+
+  async function runPredict() {
+    if (!lastImage || !modelReady) return;
+    els.infer.hidden = false;
+    els.resultsCard.hidden = true;
+    try {
+      const res = await DR.predict(lastImage, { date: dateKey, meal, topN: 3 });
+      renderResults(res);
+    } catch (err) {
+      els.resultsCard.hidden = false;
+      els.results.innerHTML = '';
+      const p = document.createElement('p');
+      p.className = 'plan-copy';
+      p.textContent = '识别失败：' + err.message;
+      els.results.appendChild(p);
+    }
+    els.infer.hidden = true;
+  }
+
+  /* ---------- 图片入口（拍照用 capture，摄像头由系统 App 提供，
+     不用 getUserMedia——部署在 http://IP 时它没有安全上下文会直接失败） ---------- */
+  function handleFile(file) {
+    if (!file) return;
+    photoSeq += 1;
+    const img = new Image();
+    img.onload = () => {
+      if (lastUrl) URL.revokeObjectURL(lastUrl);
+      lastUrl = img.src;
+      lastImage = img;
+      els.preview.src = img.src;
+      els.vfIdle.hidden = true;
+      els.previewWrap.hidden = false;
+      runPredict();
+    };
+    img.onerror = () => toast('图片读取失败，换一张试试');
+    img.src = URL.createObjectURL(file);
+  }
+
+  /* ---------- 能力边界 ---------- */
+  function renderChips() {
+    const list = DR.classList();
+    els.capsTitle.textContent = `目前能认出的菜（${list.length} 道）`;
+    els.caps.textContent = `支持 ${list.length} 道菜 · 图片只在本机识别，不上传`;
+    els.chips.innerHTML = '';
+    for (const name of list) {
+      const chip = document.createElement('span');
+      chip.className = 'rz-chip';
+      chip.textContent = name;
+      els.chips.appendChild(chip);
+    }
+  }
+
+  /* ---------- 事件 ---------- */
+  els.btnCam.addEventListener('click', () => els.fileCam.click());
+  els.btnAlbum.addEventListener('click', () => els.fileAlbum.click());
+  els.retakeCam.addEventListener('click', () => els.fileCam.click());
+  els.retake.addEventListener('click', () => els.fileAlbum.click());
+  els.fileCam.addEventListener('change', (e) => { handleFile(e.target.files[0]); e.target.value = ''; });
+  els.fileAlbum.addEventListener('change', (e) => { handleFile(e.target.files[0]); e.target.value = ''; });
+
+  els.mealTabs.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-meal]');
+    if (!btn) return;
+    meal = btn.dataset.meal;
+    for (const b of els.mealTabs.querySelectorAll('[data-meal]')) {
+      b.classList.toggle('is-active', b === btn);
+    }
+    els.resultsCard.hidden = true;
+    updateMenuLine();
+    renderTray();
+    if (lastImage) runPredict();
+  });
+
+  els.date.addEventListener('change', () => {
+    dateKey = els.date.value || DR.keyOf(new Date());
+    els.date.value = dateKey;
+    updateMenuLine();
+    els.resultsCard.hidden = true;
+    renderTray();
+    if (lastImage) runPredict();
+  });
+
+  window.addEventListener('pageshow', () => {
+    els.dbBanner.hidden = DR.dishes().length > 0;
+  });
+
+  /* ---------- 启动 ---------- */
+  function syncControls() {
+    els.date.value = dateKey;
+    for (const b of els.mealTabs.querySelectorAll('[data-meal]')) {
+      b.classList.toggle('is-active', b.dataset.meal === meal);
+    }
+  }
+
+  /* WASM SIMD 探测：iPhone 12 等老系统（iOS < 16.4）没有 SIMD，ORT 1.22 跑不起来，
+     与其让它卡在加载里，不如直接给出一句人话 */
+  function simdSupported() {
+    try {
+      return WebAssembly.validate(new Uint8Array([
+        0, 97, 115, 109, 1, 0, 0, 0, 1, 5, 1, 96, 0, 1, 123, 3, 2, 1, 0,
+        10, 10, 1, 8, 0, 65, 0, 253, 15, 253, 98, 11,
+      ]));
+    } catch (err) {
+      return false;
+    }
+  }
+
+  /* 带百分比的下载；模型直接回 Blob 交给 ORT，避免预载后再被重复下载一次 */
+  function preloadBlob(url, onPct) {
+    return fetch(url).then((res) => {
+      if (!res.ok) throw new Error(url + ' HTTP ' + res.status);
+      const total = Number(res.headers.get('content-length')) || 0;
+      if (!res.body || !total) {
+        onPct(100);
+        return res.arrayBuffer().then((buf) => new Blob([buf]));
+      }
+      const reader = res.body.getReader();
+      const chunks = [];
+      let got = 0;
+      const pump = () => reader.read().then((r) => {
+        if (r.done) return null;
+        chunks.push(r.value);
+        got += r.value.length;
+        onPct(Math.min(100, Math.round((got / total) * 100)));
+        return pump();
+      });
+      return pump().then(() => new Blob(chunks));
+    });
+  }
+
+  async function boot() {
+    syncControls();
+    updateMenuLine();
+    updateDayTotal();
+    renderTray();
+    renderFb();
+    els.dbBanner.hidden = DR.dishes().length > 0;
+
+    if (typeof ort === 'undefined') {
+      setStatus('推理引擎脚本没有加载出来', 'err');
+      els.caps.textContent = '加载失败：请刷新重试，反复失败请检查网络';
+      els.caps.className = 'rz-caps rz-caps-err';
+      return;
+    }
+    if (!simdSupported()) {
+      setStatus('这台设备的系统版本偏低，跑不了本地识别', 'err');
+      els.caps.textContent = '本地识别需要支持 WebAssembly SIMD 的浏览器（iOS 16.4+，或近几年的安卓 / 桌面浏览器）。可以先用网页手动选菜。';
+      els.caps.className = 'rz-caps rz-caps-err';
+      return;
+    }
+    try {
+      /* 引擎与模型全部本站直发（同源 ort/ 与 models/），不走国外 CDN——
+         之前 jsdelivr 在国内时快时慢，是「加载很慢/卡死」的根源。
+         引擎文件带一年缓存头：预载一次之后 ORT 内部再取就是缓存直读 */
+      setStatus('正在下载推理引擎…', 'busy');
+      await preloadBlob('ort/ort-wasm-simd-threaded.wasm', (p) => setStatus(`正在下载推理引擎 ${p}%`, 'busy'));
+      setStatus('正在下载模型…', 'busy');
+      const modelBlob = await preloadBlob('models/dish-cls.onnx?v=20260912c', (p) => setStatus(`正在下载模型 ${p}%`, 'busy'));
+      /* ortCdn 必须是绝对 URL：ORT 1.22 会用它拼 dynamic import 的 .mjs 路径，
+         相对路径在 module 解析里会报「Failed to resolve module specifier」。
+         模型/类别表带版本号：以后换 31 类模型时，和 dish-recognizer.js?v= 一起 bump，防旧缓存 */
+      const ortDir = new URL('ort/', location.href).href;
+      DR.configure({
+        model: URL.createObjectURL(modelBlob),
+        classes: 'models/classes.json?v=20260912c',
+        ortCdn: ortDir,
+      });
+      await DR.load((msg) => setStatus(msg, 'busy'));
+      modelReady = true;
+      setStatus(`就绪 · ${DR.classList().length} 类`, 'ok');
+      els.btnCam.disabled = false;
+      els.btnAlbum.disabled = false;
+      renderChips();
+    } catch (err) {
+      setStatus('加载失败：' + err.message, 'err');
+      els.caps.textContent = '下载失败请刷新重试；引擎 + 模型约 17MB，首次下载后浏览器会缓存';
+      els.caps.className = 'rz-caps rz-caps-err';
+    }
+  }
+
+  boot();
+})();
+</script>
+<footer class="footer" aria-label="站点备案与健康说明">
+  <p>识别与营养结果仅作日常记录参考，不构成医疗或营养诊断。</p>
+  <p><a href="https://beian.miit.gov.cn/" target="_blank" rel="noreferrer noopener">沪ICP备2026047901号-1</a></p>
+  <p class="beian-row"><a class="beian-link" href="https://beian.mps.gov.cn/#/query/webSearch?code=31011202023573" target="_blank" rel="noreferrer noopener"><img class="beian-badge" src="../public-security-record.png" alt="" width="18" height="20" loading="lazy"><span>沪公网安备31011202023573号</span></a></p>
+</footer>
+</body>
+</html>

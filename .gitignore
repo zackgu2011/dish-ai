@@ -1,0 +1,23 @@
+# Python 运行环境与依赖
+.venv/
+venv/
+env/
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# YOLO 训练产物与数据集（训练集较大，不进版本库）
+data/
+runs/
+*.pt
+yolo*-cls.pt
+
+# 临时测试图片与日志
+*.log
+.DS_Store
+Thumbs.db
+
+# 例外：部署用成品 ONNX 模型与类别定义必须保留
+!models/*.onnx
+!models/classes.json
